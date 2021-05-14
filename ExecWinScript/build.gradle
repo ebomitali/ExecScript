@@ -1,0 +1,38 @@
+plugins {
+    id 'groovy'
+    id 'idea'
+}
+
+sourceCompatibility = 1.7
+version = '1.0.0'
+
+repositories {
+    jcenter()
+    mavenCentral()
+    maven {
+        name = 'almRepoLocal'
+        url = "file://D:/Workspace/IKAN-PHASE/mvn_repo"
+    }
+}
+
+dependencies {
+    compile 'org.codehaus.groovy:groovy-all:2.5.10'
+    testImplementation gradleTestKit()
+    testCompile 'org.spockframework:spock-core:1.0-groovy-2.4'
+    testCompile 'commons-io:commons-io:2.6'
+}
+
+task pkgPhase (type:Zip) {
+    description 'Pkg into a zip for loading into Ikan Alm'
+    archiveName = "execWinScript-${version}.zip"
+    destinationDir = file("${buildDir}/dist")
+
+    from ("src/main") {
+        include 'almProperties.gradle'
+        include 'execWinScript.gradle'
+    }
+
+    doFirst {
+        println "Package to ${buildDir}/dist"
+    }
+}

@@ -1,0 +1,155 @@
+import org.gradle.internal.os.OperatingSystem;
+
+defaultTasks 'execWinScript'
+
+apply from: 'almProperties.gradle'
+
+assert OperatingSystem.current().isWindows():"This phase may run only on windows nodes"
+
+println ''
+
+// given ikan alm environment name, return tuxedo environment name
+def reduceEnvName(String name) {
+    def envName
+    switch (name) {
+        case ~/(?i)^BASELIN.*$/:
+            envName = 'BASELINE'
+            break
+        case ~/(?i)^PREPRO.*$/:
+            envName = 'PREPROD'
+            break
+        case ~/(?i)^PRO.*$/:
+            envName = 'PROD'
+            break
+        case ~/(?i)^INT.*1$/:
+            envName = 'INTR1'
+            break
+        case ~/(?i)^INT.*2$/:
+            envName = 'INTR2'
+            break
+        case ~/(?i)^SYS.*2$/:
+            envName = 'SYSR2'
+            break
+        default:
+            println "Unknown environment ${envName}. Known environments INTR1 | INTR2 | SYSR2 | PREPROD | PROD | BASELINE"
+            envName = name
+            break
+    }
+    envName
+}
+
+// Given a string with double quotes, split at blanks ignoring blank within double quotes
+List<String> splitRespectingDoubleQuotes(String str) {
+    String[] arr = str.split("\""); // split on quote first
+    List<String> res = new LinkedList<String>();
+    arr.eachWithIndex { item, index ->
+        String current = item.trim()
+        if (!current.isEmpty()) {
+            if (index % 2 == 0) {
+                // second, split on spaces (when needed)
+                String[] tmp = current.split("\\s+").each {
+                    res.add(it);
+                }
+            } else {
+                res.add("\"" + current + "\""); // return the quote back to place
+            }
+        }
+    }
+    res
+}
+
+ext {
+    buildSuffix = project.getProperty('alm.projectStream.buildSuffix').trim()
+    // correttiva, SIGE1603, Release etc
+    buildPrefix = project.getProperty('alm.projectStream.buildPrefix').trim()
+    envName = reduceEnvName(project.getProperty('alm.deploy.environmentName'))
+    // tbd SYSR2, PREPRO, PROD, BASELINE options
+    // alm.projectStream.buildSuffix=R01 or alm.projectStream.buildPrefix=correttiva
+    // correttiva: INTR1, PREPROD, PROD
+    if (buildPrefix.equalsIgnoreCase('correttiva')) {
+        projectStreamType = 'correttiva'
+        releaseTempId = 'ND'
+    } else if (buildPrefix.equalsIgnoreCase('Release')) {
+        projectStreamType = 'evolutiva'
+        releaseTempId = buildSuffix
+    } else {
+        // buildPrefix SIGE* or Release
+        projectStreamType = 'evolutiva'
+        releaseTempId = buildPrefix
+    }
+    deployPkg = "lr" + project.getProperty('alm.levelRequest.oid')
+    fromDir = project.getProperty('source')
+    sourceDir = project.getProperty('source')
+    targetDir = project.getProperty('target')
+    command = project.getProperty('param.command')
+    winScriptType = project.hasProperty('param.scriptType')?project.getProperty('param.scriptType'):'bat'
+}
+
+task execBat(type:Exec) {
+    workingDir sourceDir
+    standardOutput = new ByteArrayOutputStream()
+
+    //extension method execCmd.output() can be used to obtain the output:
+    ext.output = {
+        return standardOutput.toString()
+    }
+    doFirst {
+        List<String> lcmd = ['cmd', '/c']
+        lcmd.addAll splitRespectingDoubleQuotes(command)
+        commandLine lcmd
+        println "About to execute $lcmd, working dir is ${workingDir.canonicalPath}"
+        //println "workingDir -> ${workingDir.canonicalPath}"
+        //println "commandLine -> ${commandLine}"
+    }
+
+    doLast {
+        println "execResult -> ${execResult.getExitValue()}"
+        println "output -> ${standardOutput.toString()}"
+    }
+}
+
+task execPowershell(type:Exec) {
+    workingDir sourceDir
+    standardOutput = new ByteArrayOutputStream()
+
+    //extension method execCmd.output() can be used to obtain the output:
+    ext.output = {
+        return standardOutput.toString()
+    }
+    doFirst {
+        List<String> lcmd = ['cmd', '/c', 'Powershell',  '-File']
+        lcmd.addAll(splitRespectingDoubleQuotes(command))
+        commandLine lcmd
+        println "About to execute $lcmd, working dir is ${workingDir.canonicalPath}"
+    }
+    doLast {
+        println "execResult -> ${execResult.getExitValue()}"
+        println "output -> ${standardOutput.toString()}"
+    }
+}
+
+task execWinScript(type:Exec) {
+    workingDir sourceDir
+    standardOutput = new ByteArrayOutputStream()
+
+    //extension method execCmd.output() can be used to obtain the output:
+    ext.output = {
+        return standardOutput.toString()
+    }
+    doFirst {
+        assert winScriptType in ['bat', 'cmd', 'powershell']:"Win Script Type should be bat, cmd or powershell"
+        List<String> lcmd = ['cmd', '/c', ]
+        if (winScriptType == 'powershell')
+            lcmd.addAll('Powershell',  '-File')
+        List<String> splittedCommand = splitRespectingDoubleQuotes(command)
+        // first is command with possible partial path, convert path from windows to java (ie \ -> /)
+        lcmd.add(splittedCommand[0].replace('\\', '/'))
+        lcmd.addAll(splittedCommand[(1..-1)])
+        commandLine lcmd
+        println "About to execute $lcmd, working dir is ${workingDir.canonicalPath}"
+    }
+    doLast {
+        println "execResult -> ${execResult.getExitValue()}"
+        println "output -> ${standardOutput.toString()}"
+    }
+}
