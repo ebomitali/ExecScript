@@ -13,6 +13,7 @@ out
 .*.swp
 *.jar
 *.log
+*.bak
 /bin
 user.gradle
 /.settings
