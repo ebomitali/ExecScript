@@ -12,17 +12,22 @@ apply from: 'almProperties.gradle'
 3. adds t
  */
 
+
 import groovy.transform.InheritConstructors
+import org.gradle.internal.os.OperatingSystem
+
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+
 import static groovy.io.FileType.FILES
+
 //incubating, api is going to change
-import org.gradle.internal.os.OperatingSystem;
 
 /*
 Extends HashMap with some useful loading function
  */
+
 @InheritConstructors
 class AlmProperties extends HashMap<String, String> {
 
@@ -80,6 +85,65 @@ class AlmProperties extends HashMap<String, String> {
     }
 }
 
+def loadFromProjectResources(AlmProperties ap, String almSystem, String projectName) {
+    Path prjProps = Paths.get(almSystem, 'projectResources', projectName + '.properties')
+    if (Files.isRegularFile(prjProps)) {
+        if (ap.loadEntriesFromPropertiesFile(prjProps)) {
+            println "Loaded ${prjProps.toString()}"
+        }
+    } else {
+        println "Project properties file not found at ${prjProps.toString()}"
+    }
+}
+
+// look for a 'alm.package.name'.properties somewhere under source dir
+// source dir is set by Ikan Alm in gradle.properties
+def loadFromPackagePropertiesUnderSource(AlmProperties ap, String source, String pkgName) {
+    println "loadFromPackagePropertiesUnderSource source $source pkgName $pkgName"
+    //def pkgNamePattern = ~/(?i)${pkgName}.properties/ case insensitive
+    List<String> pkgPropList = null
+    try {
+        pkgPropList = new FileNameByRegexFinder().getFileNames(source, "(?i)${pkgName}.properties")
+    } catch (Exception excp) {
+        println "Got exception: ${excp.message}"
+    }
+    if (!pkgPropList || pkgPropList.size() != 1)
+        println "Unable to find ${pkgName}.properties under ${source}"
+    assert pkgPropList: "Expected package properties file. The ${pkgName}.properties file does not exists."
+    File packageProps = project.file(pkgPropList[0])
+    if (packageProps.exists()) {
+        ap.loadEntriesFromPropertiesFile(packageProps.toPath())
+        println "Loaded ${packageProps.toPath().toString()}"
+    } else {
+        println "Uname to find ${packageProps.toPath().toString()}"
+    }
+}
+
+// load file *.properties under resources directory within Ikan Phase
+// it is a common maven standard
+def loadFromResourcesDirWithinPhase(AlmProperties ap) {
+    //eventually load resources properties - maven standard
+    File resourcesDir = project.file("resources")
+    if (resourcesDir.exists()) {
+        resourcesDir.eachFileMatch(FILES, ~/.*\.properties/) {
+            File fi ->
+                if (ap.loadEntriesFromPropertiesFile(fi.toPath())) {
+                    println "Loaded ${fi.toPath().toString()}"
+                }
+        }
+    }
+}
+
+String getCurrentEnvironment() {
+    if (project.hasProperty('alm.deploy.environmentName')) {
+        project.property('alm.deploy.environmentName').toString()
+    } else if (project.hasProperty('alm.build.environmentName')) {
+        project.property('alm.build.environmentName').toString()
+    } else {
+        null
+    }
+}
+
 // --- Bootstrapping ---
 // set ikan.home, alm.home, alm.system path with default values
 // if an env variables (IKAN_HOME, ALM_HOME) are found, use that values
@@ -128,51 +192,19 @@ ap['almHome'] = almHome
 ap['ikanHome'] = ikanHome
 ap['almSystem'] = almSystem
 ap['toolsHome'] = ikanHome + '/tools'
+ap['almEnvironment'] = getCurrentEnvironment()
+
 //add <project name>.properties under system/phaseResources
-Path prjProps = Paths.get(almSystem, 'projectResources', project.property('alm.project.name')+'.properties')
-if (Files.isRegularFile(prjProps)) {
-    if (ap.loadEntriesFromPropertiesFile(prjProps)) {
-        println "Loaded ${prjProps.toString()}"
-    }
-} else {
-    println "Project properties file not found at ${prjProps.toString()}"
-}
-//eventually load resources properties - maven standard
-File resourcesDir = project.file("resources")
-if (resourcesDir.exists()) {
-    resourcesDir.eachFileMatch(FILES, ~/.*\.properties/) {
-        File fi ->
-            if (ap.loadEntriesFromPropertiesFile(fi.toPath())) {
-                println "Loaded ${fi.toPath().toString()}"
-            }
-    }
+loadFromProjectResources(ap, almSystem, project.property('alm.project.name').toString())
+
+// Package based project -> alm.package.name defined ow Release based project
+// load package properties if package is defined
+String pkgName = project.hasProperty('alm.package.name') ? project.property('alm.package.name') : null
+if (pkgName) {
+    loadFromPackagePropertiesUnderSource(ap, project.property('source').toString(), pkgName)
 }
 
-//Look for a seed file with properties defining the artifact to download
-//File must exists
-Path sourceDir = Paths.get(project.property('source'))
-String pkgName = project.property('alm.package.name')
-//def pkgNamePattern = ~/(?i)${pkgName}.properties/ case insensitive
-List<String> pkgPropList = null
-try {
-    pkgPropList = new FileNameByRegexFinder().getFileNames(project.property('source'), "(?i)${pkgName}.properties")
-} catch (Exception excp) {
-    println "Got exception: ${excp.message}"
-}
-//println pkgPropList
-if (!pkgPropList || pkgPropList.size() != 1)
-    println "Unable to find ${pkgName}.properties under ${source}"
-assert pkgPropList:"Expected package properties file. The ${pkgName}.properties file does not exists."
-File packageProps = project.file(pkgPropList[0])
-if (packageProps.exists()) {
-    ap.loadEntriesFromPropertiesFile(packageProps.toPath())
-    println "Loaded ${packageProps.toPath().toString()}"
-} else {
-    println "Uname to find ${packageProps.toPath().toString()}"
-}
-
-//Eventually properties defined at runtime from Ikan Alm
-//and stored in gradle.properties
+//Eventually properties defined at runtime from Ikan Alm and stored in gradle.properties
 ap.loadEntriesFromPropertiesFile(project.file("gradle.properties").toPath())
 
 //After loading properties, dump to a file for later expansion through ant task
@@ -184,8 +216,8 @@ File xpProps = project.file('all.properties')
 //println "Copy to ${xpProps.canonicalPath}"
 // load into ant to define key/values for expandproperties
 ant.loadproperties(srcFile: uxpProps.canonicalPath)
-ant.copy(tofile:xpProps.canonicalPath, file:uxpProps.canonicalPath, overwrite: true ) {
-    filterchain(){
+ant.copy(tofile: xpProps.canonicalPath, file: uxpProps.canonicalPath, overwrite: true) {
+    filterchain() {
         expandproperties()
     }
 }

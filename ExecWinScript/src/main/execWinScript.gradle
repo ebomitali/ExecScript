@@ -59,13 +59,15 @@ List<String> splitRespectingDoubleQuotes(String str) {
 }
 
 ext {
-    buildSuffix = project.getProperty('alm.projectStream.buildSuffix').trim()
+    // build level, both pkg and release, only prefix
+    buildSuffix = project.hasProperty('alm.projectStream.buildSuffix')?project.getProperty('alm.projectStream.buildSuffix').trim():null
     // correttiva, SIGE1603, Release etc
     buildPrefix = project.getProperty('alm.projectStream.buildPrefix').trim()
-    envName = reduceEnvName(project.getProperty('alm.deploy.environmentName'))
+    envName = reduceEnvName(project.getProperty('almEnvironment'))
     // tbd SYSR2, PREPRO, PROD, BASELINE options
     // alm.projectStream.buildSuffix=R01 or alm.projectStream.buildPrefix=correttiva
     // correttiva: INTR1, PREPROD, PROD
+    /*
     if (buildPrefix.equalsIgnoreCase('correttiva')) {
         projectStreamType = 'correttiva'
         releaseTempId = 'ND'
@@ -77,12 +79,12 @@ ext {
         projectStreamType = 'evolutiva'
         releaseTempId = buildPrefix
     }
-    deployPkg = "lr" + project.getProperty('alm.levelRequest.oid')
-    fromDir = project.getProperty('source')
+     */
     sourceDir = project.getProperty('source')
     targetDir = project.getProperty('target')
     command = project.getProperty('param.command')
     winScriptType = project.hasProperty('param.scriptType')?project.getProperty('param.scriptType'):'bat'
+    workingDir = project.hasProperty('param.workingDir')?project.getProperty('param.workingDir'):sourceDir
 }
 
 task execBat(type:Exec) {

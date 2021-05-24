@@ -5,6 +5,7 @@ import org.gradle.testkit.runner.GradleRunner
 import org.gradle.testkit.runner.TaskOutcome
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
+import spock.lang.Ignore
 import spock.lang.Requires
 import spock.lang.Shared
 import spock.lang.Specification
@@ -55,7 +56,7 @@ class execCmdSpec extends Specification {
 
     def cleanup() {
         //unable to debug, copy files and context to be reviewed
-        // FileUtils.copyDirectory(testProjectDir.root, new File('D:/Temp/GradleTest/execCmd'))
+        FileUtils.copyDirectory(testProjectDir.root, new File('D:/Temp/GradleTest/execCmd'))
         println "cleanup"
     }
 
@@ -158,7 +159,7 @@ class execCmdSpec extends Specification {
         File dirPowershell = testProjectDir.newFolder('powershell')
         FileUtils.copyFileToDirectory(new File('src/test/resources/write-host.ps1'), dirPowershell)
         testGradleProps << "param.scriptType=powershell\n"
-        testGradleProps << "param.command=${dirPowershell.canonicalPath}\\write-host.ps1 prova4 prova3 prova2 prova1\n"
+        testGradleProps << "param.command=${dirPowershell.canonicalPath.replace('\\', '/')}/write-host.ps1 prova4 prova3 prova2 prova1\n"
         when:
         def result = GradleRunner.create()
                 .withProjectDir(phaseDir)
