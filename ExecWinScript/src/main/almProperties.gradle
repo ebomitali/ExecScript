@@ -134,7 +134,13 @@ def loadFromResourcesDirWithinPhase(AlmProperties ap) {
     }
 }
 
+/*
+When running in a deploy environment, both build and deploy are defined
+When running in a build environment, only build is defined
+ */
 String getCurrentEnvironment() {
+    println "build has env: ${project.hasProperty('alm.build.environmentName')}"
+    println "deploy has env: ${project.hasProperty('alm.deploy.environmentName')}"
     if (project.hasProperty('alm.deploy.environmentName')) {
         project.property('alm.deploy.environmentName').toString()
     } else if (project.hasProperty('alm.build.environmentName')) {
@@ -159,23 +165,23 @@ if (OperatingSystem.current().isLinux() || OperatingSystem.current().getFamilyNa
 
 // set ikanHome
 if (System.getenv('IKAN_HOME') != null) {
-    ikanHome = System.getenv('IKAN_HOME')
+    ikanHome = System.getenv('IKAN_HOME').replace('\\', '/')
 }
 if (project.hasProperty('dir.ikan.home')) {
-    ikanHome = project.property('dir.ikan.home')
+    ikanHome = project.property('dir.ikan.home').replace('\\', '/')
 }
 // set almHome
 String almHome = ikanHome + '/alm'
 if (System.getenv('ALM_HOME') != null) {
-    almHome = System.getenv('ALM_HOME')
+    almHome = System.getenv('ALM_HOME').replace('\\', '/')
 }
 if (project.hasProperty('dir.alm.home')) {
-    almHome = project.property('dir.alm.home')
+    almHome = project.property('dir.alm.home').replace('\\', '/')
 }
 
 String almSystem = ikanHome + '/system'
 if (project.hasProperty('dir.alm.system')) {
-    almSystem = project.property('dir.alm.system')
+    almSystem = project.property('dir.alm.system').replace('\\', '/')
 }
 
 /*

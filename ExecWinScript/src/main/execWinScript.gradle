@@ -15,6 +15,9 @@ def reduceEnvName(String name) {
         case ~/(?i)^BASELIN.*$/:
             envName = 'BASELINE'
             break
+        case ~/(?i)^BUILD$/:
+            envName = 'BUILD'
+            break
         case ~/(?i)^PREPRO.*$/:
             envName = 'PREPROD'
             break
@@ -31,10 +34,11 @@ def reduceEnvName(String name) {
             envName = 'SYSR2'
             break
         default:
-            println "Unknown environment ${envName}. Known environments INTR1 | INTR2 | SYSR2 | PREPROD | PROD | BASELINE"
+            println "Unknown environment ${envName}. Known environments BUILD | INTR1 | INTR2 | SYSR2 | PREPROD | PROD | BASELINE"
             envName = name
             break
     }
+    println "reduceEnvName $envName"
     envName
 }
 
@@ -63,7 +67,9 @@ ext {
     buildSuffix = project.hasProperty('alm.projectStream.buildSuffix')?project.getProperty('alm.projectStream.buildSuffix').trim():null
     // correttiva, SIGE1603, Release etc
     buildPrefix = project.getProperty('alm.projectStream.buildPrefix').trim()
+
     envName = reduceEnvName(project.getProperty('almEnvironment'))
+    println "execWinScript ext ${envName}"
     // tbd SYSR2, PREPRO, PROD, BASELINE options
     // alm.projectStream.buildSuffix=R01 or alm.projectStream.buildPrefix=correttiva
     // correttiva: INTR1, PREPROD, PROD
@@ -84,11 +90,13 @@ ext {
     targetDir = project.getProperty('target')
     command = project.getProperty('param.command')
     winScriptType = project.hasProperty('param.scriptType')?project.getProperty('param.scriptType'):'bat'
-    workingDir = project.hasProperty('param.workingDir')?project.getProperty('param.workingDir'):sourceDir
+    println "project.hasProperty('param.workingDir') ${project.hasProperty('param.workingDir')}"
+    paramWorkingDir = project.hasProperty('param.workingDir')?project.getProperty('param.workingDir'):sourceDir
+    println "project.getProperty('param.workingDir') ${project.getProperty('param.workingDir')}"
 }
 
 task execBat(type:Exec) {
-    workingDir sourceDir
+    workingDir paramWorkingDir
     standardOutput = new ByteArrayOutputStream()
 
     //extension method execCmd.output() can be used to obtain the output:
@@ -111,7 +119,7 @@ task execBat(type:Exec) {
 }
 
 task execPowershell(type:Exec) {
-    workingDir sourceDir
+    workingDir paramWorkingDir
     standardOutput = new ByteArrayOutputStream()
 
     //extension method execCmd.output() can be used to obtain the output:
@@ -131,19 +139,25 @@ task execPowershell(type:Exec) {
 }
 
 task execWinScript(type:Exec) {
-    workingDir sourceDir
+    workingDir paramWorkingDir
+    ignoreExitValue true
     standardOutput = new ByteArrayOutputStream()
 
     //extension method execCmd.output() can be used to obtain the output:
     ext.output = {
         return standardOutput.toString()
     }
+
     doFirst {
+        println "script type $winScriptType"
+        println "command $command"
+        println "workingDir $paramWorkingDir"
         assert winScriptType in ['bat', 'cmd', 'powershell']:"Win Script Type should be bat, cmd or powershell"
         List<String> lcmd = ['cmd', '/c', ]
         if (winScriptType == 'powershell')
             lcmd.addAll('Powershell',  '-File')
         List<String> splittedCommand = splitRespectingDoubleQuotes(command)
+        println "execWinScript splittedCommand $splittedCommand"
         // first is command with possible partial path, convert path from windows to java (ie \ -> /)
         lcmd.add(splittedCommand[0].replace('\\', '/'))
         lcmd.addAll(splittedCommand[(1..-1)])
@@ -153,5 +167,8 @@ task execWinScript(type:Exec) {
     doLast {
         println "execResult -> ${execResult.getExitValue()}"
         println "output -> ${standardOutput.toString()}"
+        if(execResult.getExitValue() != 0) {
+            throw new GradleException('command returned an error exit value')
+        }
     }
 }
